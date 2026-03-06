@@ -1,0 +1,354 @@
+{
+  "name": "EU AI Act High-Risk Company Identification and Email Alert",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d6df2757-2dbf-41e1-8da4-c1956283020c",
+      "name": "Start Scraping",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        256,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $node[\"Code in JavaScript\"].json.url }}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "4d73e851-feb0-46e9-8463-bfcb3f08a973",
+      "name": "Fetch Website HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "company_name",
+              "cssSelector": "h1"
+            },
+            {
+              "key": "description",
+              "cssSelector": "p"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "80f72446-d5f4-47f7-bfcf-b146efdc242a",
+      "name": "Extract Company Data",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        704,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.company_name + ': ' + $json.description }} {{ $json.company_name + ' : ' + $json.description }}\n\nAgis en tant qu'expert juridique spécialisé en technologie. Analyse si l'entreprise ci-dessus présente des risques au regard de l'EU AI Act.\n\nInstructions strictes pour ta réponse :\n1. Détermine si l'activité est à 'Haut Risque' (ex: scoring de crédit, biométrie, recrutement).\n2. Réponds exclusivement au format JSON avec ces clés : \n   - \"is_high_risk\" (true ou false)\n   - \"reasoning\" (ton analyse détaillée EN FRANÇAIS)\n   - \"confidence\" (un nombre entre 0 et 1)\n\nImportant : La clé 'reasoning' doit être rédigée entièrement en français professionnel.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an EU AI Act compliance expert. Analyze companies based on their description to determine if they are developing or deploying high-risk AI systems under the EU AI Act. High-risk AI systems include: biometric identification, critical infrastructure, education/employment, law enforcement, migration/border control, justice systems, and essential services. Consider the company's industry, products, and services."
+        }
+      },
+      "id": "ed2fb832-1273-4bb2-adae-9df30c430fce",
+      "name": "Analyze EU AI Act Risk",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        928,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "5a98d653-23ab-4c5f-9d02-adbff5fb86e9",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        528
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "mYPTB7XCeQyvatCK",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n\t\"type\": \"object\",\n\t\"properties\": {\n\t\t\"is_high_risk\": {\n\t\t\t\"type\": \"boolean\",\n\t\t\t\"description\": \"Whether the company is developing or deploying high-risk AI systems under the EU AI Act\"\n\t\t},\n\t\t\"risk_category\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"The specific EU AI Act risk category if high-risk (e.g., biometric identification, law enforcement, critical infrastructure)\"\n\t\t},\n\t\t\"reasoning\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"Explanation of why the company is or is not considered high-risk\"\n\t\t},\n\t\t\"confidence\": {\n\t\t\t\"type\": \"number\",\n\t\t\t\"description\": \"Confidence score from 0 to 1\"\n\t\t}\n\t}\n}"
+      },
+      "id": "533393f0-1530-436b-aed4-4d04175b91b0",
+      "name": "Risk Analysis Output",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1072,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.output.is_high_risk }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0a5977e6-af89-4190-a5ca-9e1429da3987",
+      "name": "Filter High-Risk Companies",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.data.emails[0].value }}",
+        "subject": "EU AI Act Compliance Notice - High-Risk AI System Identified",
+        "message": "=Bonjour {{ $json.emails[0].first_name }}{{ $json.data.emails[0].first_name }},\n<br><br>\nNotre système d'analyse automatisée a identifié que votre organisation <b>Tala</b>, pourrait développer ou déployer des systèmes d'IA à <b>Haut Risque</b> selon l'EU AI Act.\n<br><br>\nEn tant que {{ $json.emails[0].position }}{{ $json.data.emails[1].position }}, cette information est cruciale pour votre mise en conformité réglementaire.\n<br><br>\n📋 <b>Détails de l'analyse :</b> {{ $('Filter High-Risk Companies').item.json.output.reasoning }}{{ $node[\"Analyze EU AI Act Risk\"].json.reasoning }}\n<br><br>\n\n\n🎯 <b>Niveau de confiance :</b> {{ $('Filter High-Risk Companies').item.json.output.confidence }}{{ $node[\"Analyze EU AI Act Risk\"].json.confidence }}\n<br><br>\n\n⚠️ <b>Risques et Pénalités encourus :</b>\n<br>\nEn cas de non-conformité aux exigences de l'EU AI Act (notamment pour le scoring de crédit), votre entreprise s'expose à des sanctions sévères. Pour plus de détails sur les obligations et les amendes (allant jusqu'à 35M€ ou 7% du CA), vous pouvez consulter le texte officiel ici : \n<a href=\"https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:32024R1689\"><b>Règlement (UE) 2024/1689 (AI Act)</b></a>\n<br><br>\nNous restons à votre disposition pour vous accompagner dans cette mise en conformité technique et juridique.\n<br><br>\nCordialement,\n<br>\n<b>DONGMO DERLICH</b>\n<br>\nConsultant Data Analyst Finance, Conformité Fintech & IA",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1869d089-25e7-438b-96b1-aa744922c568",
+      "name": "Send Warning Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1712,
+        304
+      ],
+      "webhookId": "4c2208ce-1857-49ce-b97f-9ee55fb845dc",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "eQ61iIowLvPRqLnX",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "derlich.dongmo1@gmail.com",
+        "subject": "=EU AI Act Alert Sent - {{ $json.company_name }}",
+        "emailType": "text",
+        "message": "=A high-risk AI Act warning email was successfully sent to {{ $json.company_name }}.\n\nRisk Category: {{ $json.output.risk_category }}\nConfidence: {{ $json.output.confidence }}\nReasoning: {{ $json.output.reasoning }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "78155912-e003-49cb-8027-345c399be160",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1936,
+        304
+      ],
+      "webhookId": "6e15e01b-9861-4645-9349-7f84d156c9fd",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "eQ61iIowLvPRqLnX",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.hunter.io/v2/domain-search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "domain",
+              "value": "={{ $node[\"Fetch Website HTML\"].parameter[\"url\"].split('/')[2] }}"
+            },
+            {
+              "name": "api_key",
+              "value": "3a601d2402976e935df7f353c72b758b4cea84a0"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1488,
+        304
+      ],
+      "id": "eb07d26e-ca5a-4135-9881-a0f981962ea9",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  { json: { url: \"https://www.tala.co\" } },\n  { json: { url: \"https://www.chippercash.com\" } },\n  { json: { url: \"https://www.flutterwave.com\" } },\n  { json: { url: \"https://www.monzo.com\" } },\n  { json: { url: \"https://www.revolut.com\" } },\n  { json: { url: \"https://www.opayweb.com\" } },\n  { json: { url: \"https://www.wave.com\" } },\n  { json: { url: \"https://www.luno.com\" } },\n  { json: { url: \"https://www.carbon.africa\" } },\n  { json: { url: \"https://www.yoco.com\" } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        304
+      ],
+      "id": "7b324cf2-9461-4155-868f-bcb48a3f71b0",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Scraping": {
+      "main": [
+        [
+          {
+            "node": "Fetch Website HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Website HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Company Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Company Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze EU AI Act Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyze EU AI Act Risk",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Analysis Output": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Analyze EU AI Act Risk",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze EU AI Act Risk": {
+      "main": [
+        [
+          {
+            "node": "Filter High-Risk Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter High-Risk Companies": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Warning Email": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Send Warning Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "availableInMCP": false
+  },
+  "versionId": "8a35f89b-7e12-47fa-996b-2e2a2a5e7d0b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5d58609481ac845853897c4355a027899e1b772f98254bb3b200380f2f71d2ba"
+  },
+  "id": "ZcsJzTzyzArL3rUm",
+  "tags": []
+}
